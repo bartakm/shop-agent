@@ -12,6 +12,7 @@ dependencies = [
 [project.scripts]
 shop-agent = "shop_agent:main"
 shop-erp = "shop_agent.server:main"
+shop-eval = "shop_agent.evals:main"
 
 [build-system]
 requires = ["uv_build>=0.11.17,<0.12.0"]

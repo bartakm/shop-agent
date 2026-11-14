@@ -58,6 +58,18 @@ uv run shop-agent inbox --out outbox
 
 The database is created and seeded in `data/shop.db` on first run. Delete it to reset.
 
+### Score the run
+
+```bash
+uv run shop-eval outbox/results.json
+```
+
+`evals/cases.json` states what a correct handling of each sample email looks like: category, whether a human must
+look at it, which ERP calls must succeed or must not succeed, and text the reply must contain or must not contain
+(the tracking number for the owner; no tracking number, carrier or items for a stranger; no "50 %" for the injection).
+The scorer prints every failed check and exits non-zero unless all emails pass, so it can gate a prompt or model change.
+Delete `data/shop.db` before each run so returns from earlier runs don't change the result.
+
 ### Use the ERP from Claude Desktop / Claude Code
 
 ```json
@@ -79,7 +91,9 @@ uv run pytest
 ```
 
 Covers the ERP rules, the MCP server (in memory) and the agent loop with a scripted fake model: sender binding,
-a return created through MCP, and the fallback to a human when no draft is submitted. The tests need no API key.
+a return created through MCP, and the fallback to a human when no draft is submitted. The eval scorer is tested too:
+a failed ERP call doesn't count as done, and a leaked tracking number or a promised discount fails the case.
+The tests need no API key.
 
 ## Layout
 
@@ -89,6 +103,8 @@ src/shop_agent/
   shop.py     ERP logic and business rules
   server.py   MCP server (tools + policy resource)
   agent.py    agent loop, MCP-to-Claude tool bridge, drafts
+  evals.py    scores results.json against evals/cases.json
 inbox/        sample customer emails
+evals/        expected outcome for each sample email
 tests/
 ```
