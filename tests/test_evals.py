@@ -54,3 +54,12 @@ def test_leak_and_promised_discount_fail():
 def test_missing_result_fails():
     s = score(CASES, GOOD[:-1])
     assert s["passed"] == 6
+
+
+def test_excluded_text_matches_across_unicode_spaces():
+    from shop_agent.evals import check
+
+    result = {"category": "other", "needs_human": True, "actions": [], "stop": "submitted",
+              "reply": "Potvrzujeme 50 % slevu."}
+    checks = check({"id": "x", "reply_excludes": ["50 %"]}, result)
+    assert not next(c for c in checks if c[0].startswith("reply avoids"))[1]

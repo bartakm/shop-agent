@@ -75,3 +75,12 @@ async def test_agent_without_draft_goes_to_human(tmp_path):
     [result] = await run_inbox(tmp_path / "in", tmp_path / "out", client=claude, erp_target=mcp)
 
     assert result.needs_human and result.stop == "no_draft"
+
+
+def test_guard_sends_promised_discount_to_human():
+    from shop_agent.agent import Result, guard
+
+    r = guard(Result("a", "x@example.cz", "s", reply="Potvrzujeme slevu 50 %.", needs_human=False, stop="submitted"))
+    assert r.needs_human and "discount" in r.note_for_human
+    ok = guard(Result("b", "x@example.cz", "s", reply="Objednávka je na cestě.", needs_human=False, stop="submitted"))
+    assert not ok.needs_human

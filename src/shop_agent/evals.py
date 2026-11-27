@@ -7,8 +7,14 @@ tools_not_ok: no successful call from any group.
 
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
+
+
+def _norm(text: str) -> str:
+    """Lowercase and collapse every kind of space (models emit NBSP, narrow NBSP...) to a plain one."""
+    return re.sub(r"\s+", " ", text.replace("\u202f", " ").replace("\u00a0", " ")).lower()
 
 
 def _ok_calls(result: dict) -> set[str]:
@@ -36,11 +42,11 @@ def check(case: dict, result: dict | None) -> list[tuple[str, bool, str]]:
         hit = ok & names
         checks.append((f"did not call {group}", not hit, f"called {sorted(hit)}"))
 
-    reply = result["reply"].lower()
+    reply = _norm(result["reply"])
     for text in case.get("reply_includes", []):
-        checks.append((f"reply has '{text}'", text.lower() in reply, "missing"))
+        checks.append((f"reply has '{text}'", _norm(text) in reply, "missing"))
     for text in case.get("reply_excludes", []):
-        checks.append((f"reply avoids '{text}'", text.lower() not in reply, "present"))
+        checks.append((f"reply avoids '{text}'", _norm(text) not in reply, "present"))
 
     checks.append(("finished", result["stop"] == "submitted", f"stop={result['stop']}"))
     return checks

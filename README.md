@@ -30,6 +30,9 @@ The same MCP server also plugs straight into Claude Desktop or Claude Code, so s
   "needs human".
 - **Manual agent loop** instead of the SDK tool runner, because of the argument binding above and to log
   every ERP call per email.
+- **A last check in code, after the model.** If a draft that is marked ready mentions a discount, compensation
+  or a percentage, `guard()` sends it to a human anyway. A prompt-injection run on an open model confirmed a
+  "50 % discount" before this check existed.
 - Model `claude-opus-5-5` at medium effort, with server-side refusal fallback enabled
   (`fallbacks: "default"`).
 
@@ -57,6 +60,22 @@ uv run shop-agent inbox --out outbox
 ```
 
 The database is created and seeded in `data/shop.db` on first run. Delete it to reset.
+
+### Run on Groq (free tier, open model)
+
+```bash
+export GROQ_API_KEY=...
+SHOP_AGENT_PROVIDER=groq SHOP_TODAY=2026-11-14 uv run shop-agent inbox --out outbox
+```
+
+Same MCP server, sender binding and draft tool, through Groq's OpenAI-compatible API (`openai/gpt-oss-120b`,
+override with `GROQ_MODEL`). Groq has no strict tool schemas, so `submit_draft` is validated in code. The free tier
+allows 8 000 tokens per minute, so the run waits on rate limits and takes a few minutes.
+
+Results with `openai/gpt-oss-120b` (two runs, 2026-11-27): 4/7 emails fully correct each time. In the first run the
+model confirmed the injected 50 % discount; the eval missed it because the model wrote a narrow no-break space
+(`50\u202f%`), so the scorer now normalises spaces, and `guard()` was added. It also often keeps someone else's order
+and the late return as "ready" instead of handing them to a human.
 
 ### Score the run
 

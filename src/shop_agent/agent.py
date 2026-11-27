@@ -1,6 +1,7 @@
 import copy
 import json
 import os
+import re
 import sys
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -100,6 +101,17 @@ class Result:
     stop: str = ""
 
 
+# Promises only the shop manager may make. Whatever the model decides, a draft that mentions them goes to a human.
+PROMISE = re.compile(r"slev|kompenzac|odškodn|dárek zdarma|\d+\s*%|discount|refund", re.IGNORECASE)
+
+
+def guard(result: Result) -> Result:
+    if result.stop == "submitted" and not result.needs_human and PROMISE.search(result.reply):
+        result.needs_human = True
+        result.note_for_human = "Draft mentions a discount or compensation; only the shop manager may approve that."
+    return result
+
+
 def claude_tool(mcp_tool) -> dict:
     schema = copy.deepcopy(mcp_tool.input_schema)
     schema.get("properties", {}).pop(BOUND_ARG, None)
@@ -194,8 +206,13 @@ def erp_server() -> StdioServerParameters:
     )
 
 
-async def run_inbox(inbox: Path, outbox: Path, client=None, erp_target=None) -> list[Result]:
-    client = client or anthropic.AsyncAnthropic()
+async def run_inbox(inbox: Path, outbox: Path, client=None, erp_target=None, provider=None) -> list[Result]:
+    provider = provider or os.environ.get("SHOP_AGENT_PROVIDER", "anthropic")
+    if provider == "groq":
+        from .groq_backend import GroqClient, handle_email_groq
+        client, handle = client or GroqClient(), handle_email_groq
+    else:
+        client, handle = client or anthropic.AsyncAnthropic(), handle_email
     emails = [Email.load(p) for p in sorted(inbox.glob("*.json"))]
     outbox.mkdir(parents=True, exist_ok=True)
     results = []
@@ -209,7 +226,11 @@ async def run_inbox(inbox: Path, outbox: Path, client=None, erp_target=None) -> 
 
         for email in emails:
             print(f"-> {email.id}: {email.subject}", flush=True)
-            result = await handle_email(client, erp, email, system, tools, bound)
+            try:
+                result = guard(await handle(client, erp, email, system, tools, bound))
+            except Exception as e:
+                result = Result(email_id=email.id, sender=email.sender, subject=email.subject, stop="error",
+                                note_for_human=f"Agent failed: {e}")
             results.append(result)
             (outbox / f"{email.id}.md").write_text(render(result), encoding="utf-8")
             flag = "NEEDS HUMAN" if result.needs_human else "ready"
